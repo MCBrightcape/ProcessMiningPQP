@@ -31,7 +31,7 @@ library(processmonitR)
 library(shiny)
 
 # load BPI Challenge 2017 data set ####
-data <- readr::read_csv('./RScripts/loanapplicationfileTest.csv',
+data <- readr::read_csv('loanapplicationfileTest.csv',
                         locale = locale(date_names = 'en',
                                         encoding = 'ISO-8859-1'))
 
@@ -48,7 +48,7 @@ names(data) <- str_replace_all(names(data), c(" " = "_" , "," = "" ))
 events <- bupaR::activities_to_eventlog(
   head(data, n=100),
   case_id = 'Case_ID',
-  activity_id = 'Activitys',
+  activity_id = 'Activity',
   resource_id = 'Resource',
   timestamps = c('starttimestamp2', 'endtimestamp2')
 )
@@ -61,18 +61,18 @@ ui <- fluidPage(
                                     fluidRow(
                                       column(4,
                                         selectInput("inSelect", "Select case",cases),
-                                        sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=1),
-                                        sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0)),
+                                        sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
+                                        sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01)),
                                       column(8,
-                                        grVizOutput(outputId = "graph")))),
+                                        grVizOutput('processGraph')))),
                tabPanel("Variants"),
                tabPanel("Data overview")))
   
 
 server <- function(input,output) {
-  output$graph <- reactive({ events %>%
+  output$processGraph <-  renderGrViz(events %>%
     filter_activity_frequency(percentage = input$setGraphActFreq) %>% # show only most frequent activities
     filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%    # show only the most frequent traces
-    process_map(render = T) })
+    process_map(render = T))
 }
 shinyApp(ui = ui, server = server)
