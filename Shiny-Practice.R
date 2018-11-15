@@ -1,49 +1,21 @@
-# check installed packages and install only necessary ones ####
-c_necessary_packages <- c(
-  'bupaR',
-  'edeaR',
-  'processmapR',
-  'eventdataR',
-  'readr',
-  'tidyverse',
-  'DiagrammeR',
-  'ggplot2',
-  'stringr',
-  'lubridate',
-  'processmonitR'
-)
-c_missing_packages <- c_necessary_packages[!(c_necessary_packages %in% installed.packages()[,"Package"])]
-if(length(c_missing_packages) > 0) install.packages(c_missing_packages)
-
-
-# load libraries ####
-library(bupaR)
-library(edeaR)
-library(processmapR)
-library(eventdataR)
-library(readr)
-library(tidyverse)
-library(DiagrammeR)
-library(ggplot2)
-library(stringr)
-library(lubridate)
-library(processmonitR)
-library(shiny)
-
-
-
+source("ServerInit.R")
 ui <- fluidPage(
         navbarPage("Process Mining",
-                           tabPanel("Graph",
-                                    fluidRow(
-                                      column(3,
-                                        selectInput("inSelect", "Select case", seq(0,20,1), selectize = FALSE),
-                                        sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
-                                        sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
-                                        textOutput("giveme")),
-                                      column(9,
-                                        grVizOutput('processGraph')))),
-               tabPanel("Variants"),
+               tabPanel("Graph",
+                        selectInput("dataType", "Select type", c("Frequency","Performance"), selectize = FALSE),
+                        sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
+                        sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
+                        grVizOutput('processGraphVisual')
+                        ),
+               tabPanel("Variants",
+                        fluidRow(
+                          column(3,
+                                 selectInput("inSelect", "Select case", "Loading...", selectize = FALSE),
+                                 sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
+                                 sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
+                                 textOutput("giveme")),
+                          column(9,
+                                 grVizOutput('processGraphVariants')))),
                tabPanel("Data overview",
                         fileInput("file1", "Choose CSV File",
                                   accept = c(
@@ -55,53 +27,48 @@ ui <- fluidPage(
   
 
 server <- function(input,output,session) {
+  source("DataInit.R")
   options(shiny.maxRequestSize=30*1024^2)
-  
-  # load BPI Challenge 2017 data set ####
-  data <- readr::read_csv('loanapplicationfileTest.csv',
-                          locale = locale(date_names = 'en',
-                                          encoding = 'ISO-8859-1'))
-  
-  # change timestamp to date var
-  data$starttimestampFormatted = as.POSIXct(data$`starttimestamp`,
-                                            format = "%d/%m/%Y %H:%M")
-  
-  data$endtimestampFormatted = as.POSIXct(data$`endtimestamp`,
-                                          format = "%d/%m/%Y %H:%M")
-  
-  # remove blanks from var names
-  names(data) <- str_replace_all(names(data), c(" " = "_" , "," = "" ))
-  
-  events <- bupaR::activities_to_eventlog(
-    head(data, n=10000),
-    case_id = 'Case_ID',
-    activity_id = 'Activity',
-    resource_id = 'Resource',
-    timestamps = c('starttimestampFormatted', 'endtimestampFormatted')
-  )
   
   
   variants <- traces(events)[order(-traces(events)$relative_frequency),]
-  X <- vector(mode="character")
+  variantsDF <- data.frame(character(nrow(variants)),
+                   list(1:nrow(variants)), 
+                   stringsAsFactors=FALSE)
+  
+  colnames(variantsDF)[1] <- "Index"
+  colnames(variantsDF)[2] <- "Activities"
   
   for (i in 1:nrow(variants)){
-    combined <- paste(c(i, substr(variants[i,3],0,6)), collapse = ":  Relative freq: ")
-    X[i] <- c(combined)
+    combined <- paste(c(i, substr(variants[i,3],0,6)), collapse = ":Relative freq:")
+    variantsDF[i,1] <- combined
+    variantsDF[i,2] <- variants[i,1]
   }
                   
   updateSelectInput(session, "inSelect",
-                    choices = X
+                    choices = variantsDF$Index
                     )
   
-  output$giveme <- reactive({input$inSelect})
+  output$processGraphVariants <-  renderGrViz({
+    req(input$inSelect) 
+    events %>% filter_activity(activities = unlist(strsplit(variantsDF$Activities[which(variantsDF$Index == input$inSelect)],","))) %>%
+    filter_activity_frequency(percentage = input$setGraphActFreq) %>% # show only most frequent activities
+    filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
+    process_map(render = T)})
   
-  # output$processGraph <-  renderGrViz({
-  #   req(input$inSelect)
-  #   events %>% filter_case(cases = c(input$inSelect)) %>%
-  #   filter_activity_frequency(percentage = input$setGraphActFreq) %>% # show only most frequent activities
-  #   filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
-  #   process_map(render = T)})
-  
+  output$processGraphVisual <-  renderGrViz({
+    if(input$dataType == "Frequency"){
+      events %>%
+        filter_activity_frequency(percentage = input$setGraphActFreq) %>% # show only most frequent activities
+        filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
+        process_map(render = T)
+    }else{
+      events %>%
+        filter_activity_frequency(percentage = input$setGraphActFreq) %>% # show only most frequent activities
+        filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
+        process_map(performance(mean, "hours"),render = T)
+    }})
+
   output$contents <- renderDataTable({
     req(input$file1)
     inFile <- input$file1
