@@ -1,21 +1,19 @@
 source("ServerInit.R")
-ui <- fluidPage(
+ui <- fluidPage(style = "height:100%",
         navbarPage("Process Mining",
                tabPanel("Graph",
-                        selectInput("dataType", "Select type", c("Frequency","Performance"), selectize = FALSE),
-                        sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
-                        sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
-                        grVizOutput('processGraphVisual')
-                        ),
-               tabPanel("Variants",
                         fluidRow(
-                          column(3,
+                          column(2,
+                            selectInput("dataType", "Select type", c("Frequency","Performance"), selectize = FALSE),
+                            sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
+                            sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01)),
+                          column(10,
+                              grVizOutput('processGraphVisual', height = "800px")))),
+               tabPanel("Variants",
                                  selectInput("inSelect", "Select case", "Loading...", selectize = FALSE),
                                  sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
                                  sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
-                                 textOutput("giveme")),
-                          column(9,
-                                 grVizOutput('processGraphVariants')))),
+                                 grVizOutput('processGraphVariants')),
                tabPanel("Data overview",
                         fileInput("file1", "Choose CSV File",
                                   accept = c(
@@ -30,6 +28,7 @@ server <- function(input,output,session) {
   source("DataInit.R")
   options(shiny.maxRequestSize=30*1024^2)
   
+  output$graphSummary <- renderDataTable(events, options = list(pageLength = 5))
   
   variants <- traces(events)[order(-traces(events)$relative_frequency),]
   variantsDF <- data.frame(character(nrow(variants)),
