@@ -40,7 +40,7 @@ data$endtimestampFormatted = as.POSIXct(data$`FullDateEnd`,
 # names(data) <- str_replace_all(names(data), c(" " = "_" , "," = "" ))
 
 events <- activities_to_eventlog(
-  data,
+  head(data, n=10000),
   case_id = 'Werknemer',
   activity_id = 'Omschrijving uren',
   resource_id = 'Naam Werknemer',
