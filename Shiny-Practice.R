@@ -14,21 +14,27 @@ ui <- fluidPage(style = "height:100%",
                                  sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
                                  sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
                                  grVizOutput('processGraphVariants')),
-               tabPanel("Data overview",
+               tabPanel("Data Import",
+                  sidebarLayout(
+                    sidebarPanel(width = 3,
                         fileInput("file1", "Choose CSV File",
                                   accept = c(
                                     "text/csv",
                                     "text/comma-separated-values,text/plain",
                                     ".csv")),
-                        dataTableOutput("contents")
-                        )))
+                            selectInput("selectCase","Select CaseID header",choices = "Import Data..."),
+                            selectInput("selectActivity","Select ActivityID header",choices = "Import Data..."),
+                            selectInput("selectResource","Select ResourceID header",choices ="Import Data..."),
+                            varSelectInput("selectTimestamp","Select Timestamps header",data = "", multiple = TRUE)),
+                    mainPanel(width = 9,
+                      dataTableOutput('importGraphSummary')
+                    )
+                    ))))
   
 
 server <- function(input,output,session) {
   source("DataInit.R")
   options(shiny.maxRequestSize=30*1024^2)
-  
-  output$graphSummary <- renderDataTable(events, options = list(pageLength = 5))
   
   variants <- traces(events)[order(-traces(events)$relative_frequency),]
   variantsDF <- data.frame(character(nrow(variants)),
@@ -67,11 +73,20 @@ server <- function(input,output,session) {
         filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
         process_map(performance(mean, "hours"),render = T)
     }})
-
-  output$contents <- renderDataTable({
+  
+  observe({
     req(input$file1)
-    inFile <- input$file1
-    read.csv(inFile$datapath)
+    infile <- input$file1
+    importData <- read.csv(infile$datapath)
+    headers <- as.list(names(importData))
+    updateSelectInput( session, "selectCase",choices = headers)
+    updateSelectInput( session, "selectActivity",choices = headers)
+    updateSelectInput( session, "selectResource",choices = headers)
+    updateVarSelectInput(session, "selectTimestamp",data = importData)
+    output$importGraphSummary <- renderDataTable(importData %>% select(input$selectCase, input$selectActivity, input$selectResource, unlist(input$selectTimestamp, recursive = TRUE)), 
+                                                 options = list(pageLength = 5, maxItems = 2))
   })
+  
+
 }
 shinyApp(ui = ui, server = server)
