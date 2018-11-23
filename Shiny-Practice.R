@@ -1,4 +1,6 @@
 source("ServerInit.R")
+source("DataInit.R")
+
 ui <- fluidPage(style = "height:100%",
         navbarPage("Process Mining",
                tabPanel("Graph",
@@ -22,10 +24,12 @@ ui <- fluidPage(style = "height:100%",
                                     "text/csv",
                                     "text/comma-separated-values,text/plain",
                                     ".csv")),
-                            selectInput("selectCase","Select CaseID header",choices = "Import Data..."),
-                            selectInput("selectActivity","Select ActivityID header",choices = "Import Data..."),
-                            selectInput("selectResource","Select ResourceID header",choices ="Import Data..."),
-                            varSelectInput("selectTimestamp","Select Timestamps header",data = "", multiple = TRUE)),
+                            selectInput("selectCase","Select Case",choices = "Import Data..."),
+                            selectInput("selectActivity","Select Activity",choices = "Import Data..."),
+                            selectInput("selectResource","Select Resource",choices ="Import Data..."),
+                            selectInput("selectTimestamps","Select Timestamp(s)",choices = "Import Data...", multiple = TRUE),
+                            actionButton("dataSelected", "Upload Data")
+                        ),
                     mainPanel(width = 9,
                       dataTableOutput('importGraphSummary')
                     )
@@ -33,7 +37,8 @@ ui <- fluidPage(style = "height:100%",
   
 
 server <- function(input,output,session) {
-  source("DataInit.R")
+  startLocalDatabase()
+  
   options(shiny.maxRequestSize=30*1024^2)
   
   variants <- traces(events)[order(-traces(events)$relative_frequency),]
@@ -79,14 +84,24 @@ server <- function(input,output,session) {
     infile <- input$file1
     importData <- read.csv(infile$datapath)
     headers <- as.list(names(importData))
-    updateSelectInput( session, "selectCase",choices = headers)
-    updateSelectInput( session, "selectActivity",choices = headers)
-    updateSelectInput( session, "selectResource",choices = headers)
-    updateVarSelectInput(session, "selectTimestamp",data = importData)
-    output$importGraphSummary <- renderDataTable(importData %>% select(input$selectCase, input$selectActivity, input$selectResource, unlist(input$selectTimestamp, recursive = TRUE)), 
-                                                 options = list(pageLength = 5, maxItems = 2))
+    updateSelectInput(session, "selectCase",choices = headers)
+    updateSelectInput(session, "selectActivity",choices = headers)
+    updateSelectInput(session, "selectResource",choices = headers)
+    updateSelectInput(session, "selectTimestamps",choices = headers)
+    output$importGraphSummary <- renderDataTable(importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps), 
+                                                 options = list(pageLength = 5))
+    
+    observeEvent(input$dataSelected, {
+      if((importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps) %>% ncol) < 4){
+        print("please select the correct headers")
+      }else{
+        print("Saving data to database...")
+        selectedData <- importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps)
+        setDatabase(selectedData, c(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps))
+        print("Finished Saving data to database")
+      }
+    })
   })
-  
 
 }
 shinyApp(ui = ui, server = server)
