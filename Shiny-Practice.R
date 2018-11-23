@@ -37,9 +37,10 @@ ui <- fluidPage(style = "height:100%",
   
 
 server <- function(input,output,session) {
-  startLocalDatabase()
+  events <- startLocalDatabase()
   
   options(shiny.maxRequestSize=30*1024^2)
+
   
   variants <- traces(events)[order(-traces(events)$relative_frequency),]
   variantsDF <- data.frame(character(nrow(variants)),
@@ -82,7 +83,9 @@ server <- function(input,output,session) {
   observe({
     req(input$file1)
     infile <- input$file1
-    importData <- read.csv(infile$datapath)
+    importData <- readr::read_csv(infile$datapath,
+                                  locale = locale(date_names = 'en',
+                                                  encoding = 'ISO-8859-1'))
     headers <- as.list(names(importData))
     updateSelectInput(session, "selectCase",choices = headers)
     updateSelectInput(session, "selectActivity",choices = headers)
@@ -92,12 +95,19 @@ server <- function(input,output,session) {
                                                  options = list(pageLength = 5))
     
     observeEvent(input$dataSelected, {
-      if((importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps) %>% ncol) < 4){
+      selectedData <- importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps)
+      if((ncol(selectedData)) < 4){
         print("please select the correct headers")
       }else{
         print("Saving data to database...")
-        selectedData <- importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps)
-        setDatabase(selectedData, c(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps))
+        
+        headers = list()
+        headers$caseID <- input$selectCase
+        headers$activityID <- input$selectActivity
+        headers$resourceID <- input$selectResource
+        headers$timestamps <- input$selectTimestamps
+        
+        setDatabase(selectedData, headers)
         print("Finished Saving data to database")
       }
     })
