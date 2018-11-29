@@ -1,21 +1,23 @@
 source("ServerInit.R")
 source("DataInit.R")
 
-ui <- fluidPage(style = "height:100%",
+ui <- fluidPage(style = c("height:100%", "width:100%"),
         navbarPage("Process Mining",
                tabPanel("Graph",
                         fluidRow(
                           column(2,
                             selectInput(inputId="visType", "Select type", c("Frequency","Performance"), selectize = FALSE),
                             sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
-                            sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01)),
+                            sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
+                            selectInput(inputId="measureType", "Select type", c("mean","median","min","max"), selectize = FALSE),
+                            selectInput(inputId="durationType", "Select type", c("mins", "hours", "days", "weeks"), selectize = FALSE)),
                           column(10,
                               grVizOutput('processGraphVisual', height = "800px")))),
-               tabPanel("Variants",
-                                 selectInput("inSelect", "Select case", "Loading...", selectize = FALSE),
-                                 sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
-                                 sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
-                                 grVizOutput('processGraphVariants')),
+               tabPanel(id = "Variants", "Varients",
+                  sliderInput(inputId="setGraphActFreq2", label="Activity Frequency", min=0.01, max=1, value=0.01),
+                  sliderInput(inputId="setGraphTraceFreq2", label="Trace Frequency", min=0.01, max=1, value=0.01),
+                  selectInput("caseSelect", "Select case", "Loading...", selectize = FALSE),
+                  grVizOutput('processGraphVariants')),
                tabPanel("Data Import",
                   sidebarLayout(
                     sidebarPanel(width = 3,
@@ -37,71 +39,46 @@ ui <- fluidPage(style = "height:100%",
   
 
 server <- function(input,output,session) {
-  events <- startLocalDatabase()
-  
-  options(shiny.maxRequestSize=30*1024^2)
 
+events <- startLocalDatabase()
+updateCases(input, output, session, events)
   
-  variants <- traces(events)[order(-traces(events)$relative_frequency),]
-  variantsDF <- data.frame(character(nrow(variants)),
-                   list(1:nrow(variants)), 
-                   stringsAsFactors=FALSE)
-  
-  colnames(variantsDF)[1] <- "Index"
-  colnames(variantsDF)[2] <- "Activities"
-  
-  for (i in 1:nrow(variants)){
-    combined <- paste(c(i, substr(variants[i,3],0,6)), collapse = ":Relative freq:")
-    variantsDF[i,1] <- combined
-    variantsDF[i,2] <- variants[i,1]
-  }
-                  
-  updateSelectInput(session, "inSelect",
-                    choices = variantsDF$Index
-                    )
-  
-  output$processGraphVariants <-  renderGrViz({
-    req(input$inSelect) 
-    events %>% filter_activity(activities = unlist(strsplit(variantsDF$Activities[which(variantsDF$Index == input$inSelect)],","))) %>%
-    filter_activity_frequency(percentage = input$setGraphActFreq) %>% # show only most frequent activities
-    filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
-    process_map(render = T)})
-  
-  output$processGraphVisual <-  renderGrViz({createGraph(events, input$setGraphActFreq, input$setGraphTraceFreq, input$visType)})
+options(shiny.maxRequestSize=30*1024^2)
 
+output$processGraphVariants <- renderGrViz({createVariantsGraph(input, output, session, events)})
+output$processGraphVisual <-  renderGrViz({createGraph(events, input$setGraphActFreq, input$setGraphTraceFreq, input$visType, input$measureType, input$durationType)})
+
+observeEvent(input$file1, {
+  infile <<- input$file1
+  importData <<- readr::read_csv(infile$datapath,
+                                locale = locale(date_names = 'en',
+                                                encoding = 'ISO-8859-1'))
+  headers <- as.list(names(importData))
+  updateSelectInput(session, "selectCase",choices = headers)
+  updateSelectInput(session, "selectActivity",choices = headers)
+  updateSelectInput(session, "selectResource",choices = headers)
+  updateSelectInput(session, "selectTimestamps",choices = headers)
+  output$importGraphSummary <- renderDataTable(importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps), 
+                                               options = list(pageLength = 5))})
   
-  observe({
-    req(input$file1)
-    infile <- input$file1
-    importData <- readr::read_csv(infile$datapath,
-                                  locale = locale(date_names = 'en',
-                                                  encoding = 'ISO-8859-1'))
-    headers <- as.list(names(importData))
-    updateSelectInput(session, "selectCase",choices = headers)
-    updateSelectInput(session, "selectActivity",choices = headers)
-    updateSelectInput(session, "selectResource",choices = headers)
-    updateSelectInput(session, "selectTimestamps",choices = headers)
-    output$importGraphSummary <- renderDataTable(importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps), 
-                                                 options = list(pageLength = 5))
-    
-    observeEvent(input$dataSelected, {
-      selectedData <- importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps)
-      if((ncol(selectedData)) < 4){
-        print("please select the correct headers")
-      }else{
-        print("Saving data to database...")
-        
-        headers = list()
-        headers$caseID <- str_replace_all(input$selectCase, c(" " = "_" , "," = "" ))
-        headers$activityID <- str_replace_all(input$selectActivity, c(" " = "_" , "," = "" ))
-        headers$resourceID <- str_replace_all(input$selectResource, c(" " = "_" , "," = "" ))
-        headers$timestamps <- input$selectTimestamps
-        
-        events <<- setDatabase(selectedData, headers)
-        print("Finished Saving data to database")
-      }
-    })
+observeEvent(input$dataSelected, {
+    selectedData <- importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps)
+    if((ncol(selectedData)) < 4){
+      print("please select the correct headers")
+    }else{
+      print("Saving data to database...")
+      
+      headers = list()
+      headers$caseID <- str_replace_all(input$selectCase, c(" " = "_" , "," = "" ))
+      headers$activityID <- str_replace_all(input$selectActivity, c(" " = "_" , "," = "" ))
+      headers$resourceID <- str_replace_all(input$selectResource, c(" " = "_" , "," = "" ))
+      headers$timestamps <- input$selectTimestamps
+      
+      events <<- setDatabase(selectedData, headers)
+      updateCases(input, output, session, events)
+      
+      print("Finished Saving data to database")
+    }
   })
-
 }
 shinyApp(ui = ui, server = server)

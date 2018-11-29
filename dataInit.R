@@ -30,10 +30,9 @@ startLocalDatabase <-function(){
 
 setDatabase <- function(data, headers){
   #Get date seperator given in the input
-  sep <- substring(gsub('[[:digit:]]+', '', data[headers$timestamps[1]]),1,1)
+  sep <- substring(gsub('[[:digit:]]+', '', data[headers$timestamps[1]][1,]),1,1)
   format <- paste("%d","%m","%Y %H:%M",sep=sep)
   
-
   #Weird fix for listing
   for (item in data[headers$timestamps[1]]){
     fixedStarttime <- item
@@ -52,17 +51,16 @@ setDatabase <- function(data, headers){
   names(data) <- str_replace_all(names(data), c(" " = "_" , "," = "" ))
   
   events <- activities_to_eventlog(
-    data,
+    head(data, n=1000),
     case_id = headers$caseID,
     activity_id = headers$activityID,
     resource_id = headers$resourceID,
     timestamps = c('starttimestampFormatted', 'endtimestampFormatted')
   )
-  
   return(events)
 }
 
-createGraph <- function(events, setGraphActFreq, setGraphTraceFreq, visType){
+createGraph <- function(events, setGraphActFreq, setGraphTraceFreq, visType, measureType, durationType){
   return (
     if(visType == "Frequency"){
       events %>%
@@ -73,7 +71,37 @@ createGraph <- function(events, setGraphActFreq, setGraphTraceFreq, visType){
       events %>%
         filter_activity_frequency(percentage = setGraphActFreq) %>% # show only most frequent activities
         filter_trace_frequency(percentage = setGraphTraceFreq) %>%     # show only the most frequent traces
-        process_map(performance(mean, "hours"),render = T)
+        process_map(performance(get(measureType), durationType), render = T)
     })
 }
 
+createVariantsGraph <- function(input, output, session, events){
+  print(variantsDF$Index)
+  print(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)])
+  print(unlist(strsplit(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)],",")))
+  
+  return(
+    events %>% filter_activity(activities = unlist(strsplit(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)],","))) %>%
+      filter_activity_frequency(percentage = input$setGraphActFreq2) %>% # show only most frequent activities
+      filter_trace_frequency(percentage = input$setGraphTraceFreq2) %>%     # show only the most frequent traces
+      process_map(render = T)
+    )
+}
+
+updateCases <- function(input, output, session, events){
+  variants <<- traces(events)[order(-traces(events)$relative_frequency),]
+  variantsDF <<- data.frame(character(nrow(variants)),
+                           list(1:nrow(variants)), 
+                           stringsAsFactors=FALSE)
+  
+  colnames(variantsDF)[1] <<- "Index"
+  colnames(variantsDF)[2] <<- "Activities"
+  
+  for (i in 1:nrow(variants)){
+    combined <- paste(c(i, substr(variants[i,3],0,6)), collapse = ":Relative freq:")
+    variantsDF[i,1] <<- combined
+    variantsDF[i,2] <<- variants[i,1]
+  }
+  
+  updateSelectInput(session, "caseSelect", choices = variantsDF$Index)
+}
