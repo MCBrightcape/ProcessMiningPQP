@@ -6,7 +6,7 @@ ui <- fluidPage(style = "height:100%",
                tabPanel("Graph",
                         fluidRow(
                           column(2,
-                            selectInput("dataType", "Select type", c("Frequency","Performance"), selectize = FALSE),
+                            selectInput(inputId="visType", "Select type", c("Frequency","Performance"), selectize = FALSE),
                             sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
                             sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01)),
                           column(10,
@@ -67,18 +67,8 @@ server <- function(input,output,session) {
     filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
     process_map(render = T)})
   
-  output$processGraphVisual <-  renderGrViz({
-    if(input$dataType == "Frequency"){
-      events %>%
-        filter_activity_frequency(percentage = input$setGraphActFreq) %>% # show only most frequent activities
-        filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
-        process_map(render = T)
-    }else{
-      events %>%
-        filter_activity_frequency(percentage = input$setGraphActFreq) %>% # show only most frequent activities
-        filter_trace_frequency(percentage = input$setGraphTraceFreq) %>%     # show only the most frequent traces
-        process_map(performance(mean, "hours"),render = T)
-    }})
+  output$processGraphVisual <-  renderGrViz({createGraph(events, input$setGraphActFreq, input$setGraphTraceFreq, input$visType)})
+
   
   observe({
     req(input$file1)
@@ -102,12 +92,12 @@ server <- function(input,output,session) {
         print("Saving data to database...")
         
         headers = list()
-        headers$caseID <- input$selectCase
-        headers$activityID <- input$selectActivity
-        headers$resourceID <- input$selectResource
+        headers$caseID <- str_replace_all(input$selectCase, c(" " = "_" , "," = "" ))
+        headers$activityID <- str_replace_all(input$selectActivity, c(" " = "_" , "," = "" ))
+        headers$resourceID <- str_replace_all(input$selectResource, c(" " = "_" , "," = "" ))
         headers$timestamps <- input$selectTimestamps
         
-        setDatabase(selectedData, headers)
+        events <<- setDatabase(selectedData, headers)
         print("Finished Saving data to database")
       }
     })

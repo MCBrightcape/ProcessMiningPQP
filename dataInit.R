@@ -29,33 +29,51 @@ startLocalDatabase <-function(){
 }
 
 setDatabase <- function(data, headers){
-  # change timestamp to date var
-  if(length(headers$timestamps) > 1)
-  {
-    
-    print(headers$timestamps)
-    print(unlist(data["starttimestamp"], recursive=FALSE)[2])
-    
-    timestampsStart <- c(data[headers$timestamps[1]])
-    data$starttimestampFormatted = as.POSIXct(timestampsStart,
-                                                   format = "%d/%m/%Y %H:%M")
-    
-    timestampsEnd <- c(data[headers$timestamps[2]])
-    data$endtimestampFormatted = as.POSIXct(timestampsEnd,
-                                            format = "%d/%m/%Y %H:%M")
+  #Get date seperator given in the input
+  sep <- substring(gsub('[[:digit:]]+', '', data[headers$timestamps[1]]),1,1)
+  format <- paste("%d","%m","%Y %H:%M",sep=sep)
+  
+
+  #Weird fix for listing
+  for (item in data[headers$timestamps[1]]){
+    fixedStarttime <- item
+  }
+  data$starttimestampFormatted = as.POSIXct(fixedStarttime, format = format)
+  
+  if(length(headers$timestamps) > 1){
+    #Weird fix for listing
+    for (item in data[headers$timestamps[2]]){
+      fixedEndtime <- item
+    }
+    data$endtimestampFormatted = as.POSIXct(fixedEndtime, format = format)
   }
 
-  
   # remove blanks from var names
   names(data) <- str_replace_all(names(data), c(" " = "_" , "," = "" ))
   
   events <- activities_to_eventlog(
-    head(data, n=10000),
+    data,
     case_id = headers$caseID,
     activity_id = headers$activityID,
-    resource_id = headers$ResourceID,
+    resource_id = headers$resourceID,
     timestamps = c('starttimestampFormatted', 'endtimestampFormatted')
   )
-  print("Finished loading Data...")
+  
+  return(events)
+}
+
+createGraph <- function(events, setGraphActFreq, setGraphTraceFreq, visType){
+  return (
+    if(visType == "Frequency"){
+      events %>%
+        filter_activity_frequency(percentage = setGraphActFreq) %>% # show only most frequent activities
+        filter_trace_frequency(percentage = setGraphTraceFreq) %>%     # show only the most frequent traces
+        process_map(render = T)
+    }else{
+      events %>%
+        filter_activity_frequency(percentage = setGraphActFreq) %>% # show only most frequent activities
+        filter_trace_frequency(percentage = setGraphTraceFreq) %>%     # show only the most frequent traces
+        process_map(performance(mean, "hours"),render = T)
+    })
 }
 
