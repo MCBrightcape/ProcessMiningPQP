@@ -6,18 +6,25 @@ ui <- fluidPage(style = c("height:100%", "width:100%"),
                tabPanel("Graph",
                         fluidRow(
                           column(2,
-                            selectInput(inputId="visType", "Select type", c("Frequency","Performance"), selectize = FALSE),
+                            selectInput(inputId="visType", "Select type", c("Frequency","Performance")),
                             sliderInput(inputId="setGraphActFreq", label="Activity Frequency", min=0.01, max=1, value=0.01),
                             sliderInput(inputId="setGraphTraceFreq", label="Trace Frequency", min=0.01, max=1, value=0.01),
-                            selectInput(inputId="measureType", "Select type", c("mean","median","min","max"), selectize = FALSE),
-                            selectInput(inputId="durationType", "Select type", c("mins", "hours", "days", "weeks"), selectize = FALSE)),
+                            selectInput(inputId="measureType", "Select type", c("mean","median","min","max"), selected = "mean"),
+                            selectInput(inputId="durationType", "Select type", c("mins", "hours", "days", "weeks"), selected = "days")),
                           column(10,
                               grVizOutput('processGraphVisual', height = "800px")))),
-               tabPanel(id = "Variants", "Varients",
-                  sliderInput(inputId="setGraphActFreq2", label="Activity Frequency", min=0.01, max=1, value=0.01),
-                  sliderInput(inputId="setGraphTraceFreq2", label="Trace Frequency", min=0.01, max=1, value=0.01),
-                  selectInput("caseSelect", "Select case", "Loading...", selectize = FALSE),
-                  grVizOutput('processGraphVariants')),
+               tabPanel(id = "traceViewer", "Trace Viewer",
+                        plotOutput("traceExplorer"),
+                        sliderInput(inputId="setTraceFreq", label="Trace Frequency", min=0.1, max=1, value=0.1, step = 0.05)
+                        ),
+               tabPanel(id = "Variants", "Variants",
+                fluidRow(
+                  column(2,
+                    sliderInput(inputId="setGraphTraceFreq2", label="Trace Frequency", min=0.01, max=1, value=0.01),
+                    selectInput("caseSelect", "Select case", "Loading...")),
+                  column(10,
+                    textOutput("variantNodeList"))),
+                    grVizOutput('processGraphVariants')),
                tabPanel("Data Import",
                   sidebarLayout(
                     sidebarPanel(width = 3,
@@ -47,6 +54,7 @@ options(shiny.maxRequestSize=30*1024^2)
 
 output$processGraphVariants <- renderGrViz({createVariantsGraph(input, output, session, events)})
 output$processGraphVisual <-  renderGrViz({createGraph(events, input$setGraphActFreq, input$setGraphTraceFreq, input$visType, input$measureType, input$durationType)})
+output$traceExplorer <- renderPlot(events %>% trace_explorer(coverage = input$setTraceFreq))
 
 observeEvent(input$file1, {
   infile <<- input$file1
@@ -62,7 +70,9 @@ observeEvent(input$file1, {
                                                options = list(pageLength = 5))})
   
 observeEvent(input$dataSelected, {
-    selectedData <- importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps)
+    
+  selectedData <- importData %>% select(input$selectCase, input$selectActivity, input$selectResource, input$selectTimestamps)
+    
     if((ncol(selectedData)) < 4){
       print("please select the correct headers")
     }else{
@@ -74,7 +84,7 @@ observeEvent(input$dataSelected, {
       headers$resourceID <- str_replace_all(input$selectResource, c(" " = "_" , "," = "" ))
       headers$timestamps <- input$selectTimestamps
       
-      events <<- setDatabase(selectedData, headers)
+      events <<- setDatabase(importData, headers)
       updateCases(input, output, session, events)
       
       print("Finished Saving data to database")

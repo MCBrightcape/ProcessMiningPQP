@@ -2,22 +2,22 @@
 
 startLocalDatabase <-function(){
   print("Loading Local Data")
-  data <- readr::read_csv('loanapplicationfileTest.csv',
+  data <- readr::read_csv('ExampleLog.csv',
                           locale = locale(date_names = 'en',
                                           encoding = 'ISO-8859-1'))
   
   # change timestamp to date var
-  data$starttimestampFormatted = as.POSIXct(data$starttimestamp,
-                                            format = "%d/%m/%Y %H:%M")
+  data$starttimestampFormatted = as.POSIXct(data$Start_Date,
+                                            format = "%d.%m.%y %H:%M")
   
-  data$endtimestampFormatted = as.POSIXct(data$endtimestamp,
-                                          format = "%d/%m/%Y %H:%M")
+  data$endtimestampFormatted = as.POSIXct(data$End_Date,
+                                          format = "%d.%m.%y %H:%M")
   
   # remove blanks from var names
   names(data) <- str_replace_all(names(data), c(" " = "_" , "," = "" ))
   
   events <- activities_to_eventlog(
-    head(data, n=1000),
+    data,
     case_id = 'Case_ID',
     activity_id = 'Activity',
     resource_id = 'Resource',
@@ -50,14 +50,13 @@ setDatabase <- function(data, headers){
   # remove blanks from var names
   names(data) <- str_replace_all(names(data), c(" " = "_" , "," = "" ))
   
-  events <- activities_to_eventlog(
-    head(data, n=1000),
+  events <<- activities_to_eventlog(
+    data,
     case_id = headers$caseID,
     activity_id = headers$activityID,
     resource_id = headers$resourceID,
     timestamps = c('starttimestampFormatted', 'endtimestampFormatted')
   )
-  return(events)
 }
 
 createGraph <- function(events, setGraphActFreq, setGraphTraceFreq, visType, measureType, durationType){
@@ -76,13 +75,12 @@ createGraph <- function(events, setGraphActFreq, setGraphTraceFreq, visType, mea
 }
 
 createVariantsGraph <- function(input, output, session, events){
-  print(variantsDF$Index)
-  print(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)])
-  print(unlist(strsplit(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)],",")))
+
+  output$variantNodeList <- renderText(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)])
   
   return(
     events %>% filter_activity(activities = unlist(strsplit(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)],","))) %>%
-      filter_activity_frequency(percentage = input$setGraphActFreq2) %>% # show only most frequent activities
+      filter_activity_frequency(percentage = 1.0) %>% # show only most frequent activities
       filter_trace_frequency(percentage = input$setGraphTraceFreq2) %>%     # show only the most frequent traces
       process_map(render = T)
     )
