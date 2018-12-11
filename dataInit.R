@@ -74,32 +74,45 @@ createGraph <- function(events, setGraphActFreq, setGraphTraceFreq, visType, mea
     })
 }
 
-createVariantsGraph <- function(input, output, session, events){
-
-  output$variantNodeList <- renderText(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)])
-  
+createVariantsGraph2 <- function(input, output, session, events){
   return(
-    events %>% filter_activity(activities = unlist(strsplit(variantsDF$Activities[which(variantsDF$Index == input$caseSelect)],","))) %>%
+    events %>% filter_case(cases = unlist(strsplit(allVariants[input$caseSelect,'Cases'],split=", "))) %>%
       filter_activity_frequency(percentage = 1.0) %>% # show only most frequent activities
       filter_trace_frequency(percentage = input$setGraphTraceFreq2) %>%     # show only the most frequent traces
       process_map(render = T)
-    )
+  )
 }
 
-updateCases <- function(input, output, session, events){
-  variants <<- traces(events)[order(-traces(events)$relative_frequency),]
-  variantsDF <<- data.frame(character(nrow(variants)),
-                           list(1:nrow(variants)), 
-                           stringsAsFactors=FALSE)
+preproccesEventData <- function(events, session){
+  print("Processing Data")
+
+  allCases <- cases(events)
+  allVariants <<- data.frame(integer(nrow(events %>% traces())),
+                            character(nrow(events %>% traces())),
+                            integer(nrow(events %>% traces())),
+                            double(nrow(events %>% traces())),
+                            stringsAsFactors = FALSE)
   
-  colnames(variantsDF)[1] <<- "Index"
-  colnames(variantsDF)[2] <<- "Activities"
+  colnames(allVariants)[1] <<- "Index"
+  colnames(allVariants)[2] <<- "Cases"
+  colnames(allVariants)[3] <<- "Frequency"
+  colnames(allVariants)[4] <<- "Total_Days"
   
-  for (i in 1:nrow(variants)){
-    combined <- paste(c(i, substr(variants[i,3],0,6)), collapse = ":Relative freq:")
-    variantsDF[i,1] <<- combined
-    variantsDF[i,2] <<- variants[i,1]
+  for(i in 1:nrow(traces(events))){
+    caseVector <- c()
+    allVariants[i,'Index'] <<- i
+    
+    for (j in which(allCases['trace_id'] == i)){
+      allVariants[i,'Frequency'] <<- allVariants[i,'Frequency'] + 1 
+      allVariants[i,'Total_Days'] <<- allVariants[i,'Total_Days'] + allCases[j,'duration_in_days']
+      caseVector <- append(caseVector, unlist(allCases[j,'Case_ID'], use.names = FALSE))
+    }
+    allVariants[i,"Cases"] <<- toString(caseVector)
   }
   
-  updateSelectInput(session, "caseSelect", choices = variantsDF$Index)
+  allVariants <<- allVariants[order(-allVariants$Frequency),]
+  choices <<- setNames(allVariants$Index, allVariants$Frequency)
+  updateSelectInput(session, "caseSelect", choices = choices)
+  
+  print("Finished Processing Data")
 }

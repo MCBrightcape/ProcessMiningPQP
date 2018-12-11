@@ -12,7 +12,8 @@ c_necessary_packages <- c(
   'ggplot2',
   'stringr',
   'lubridate',
-  'processmonitR'
+  'processmonitR',
+  'shiny'
 )
 c_missing_packages <- c_necessary_packages[!(c_necessary_packages %in% installed.packages()[,"Package"])]
 if(length(c_missing_packages) > 0) install.packages(c_missing_packages)

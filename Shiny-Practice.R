@@ -48,11 +48,11 @@ ui <- fluidPage(style = c("height:100%", "width:100%"),
 server <- function(input,output,session) {
 
 events <- startLocalDatabase()
-updateCases(input, output, session, events)
+preproccesEventData(events, session)
   
 options(shiny.maxRequestSize=30*1024^2)
 
-output$processGraphVariants <- renderGrViz({createVariantsGraph(input, output, session, events)})
+output$processGraphVariants <- renderGrViz({createVariantsGraph2(input, output, session, events)})
 output$processGraphVisual <-  renderGrViz({createGraph(events, input$setGraphActFreq, input$setGraphTraceFreq, input$visType, input$measureType, input$durationType)})
 output$traceExplorer <- renderPlot(events %>% trace_explorer(coverage = input$setTraceFreq))
 
@@ -85,7 +85,7 @@ observeEvent(input$dataSelected, {
       headers$timestamps <- input$selectTimestamps
       
       events <<- setDatabase(importData, headers)
-      updateCases(input, output, session, events)
+      preproccesEventData(events, session)
       
       print("Finished Saving data to database")
     }
